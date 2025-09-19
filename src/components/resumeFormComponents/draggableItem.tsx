@@ -1,3 +1,4 @@
+"use client";
 import { useSortable } from "@dnd-kit/sortable";
 import React from "react";
 import { GripVertical } from "lucide-react";
