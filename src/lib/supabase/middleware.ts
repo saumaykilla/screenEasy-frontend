@@ -78,33 +78,70 @@ export async function updateSession(
     },
   } =
     await supabase.auth.getUser();
-  if (
-    user &&
-    request.nextUrl.pathname.startsWith(
-      "/auth"
-    )
-  ) {
-    await supabase.auth.signOut();
+
+  // Debug logging
+  console.log('Middleware - Path:', request.nextUrl.pathname, 'User:', user?.id ? 'authenticated' : 'not authenticated');
+
+  // Skip middleware logic for auth callback route - let it handle its own redirect
+  if (request.nextUrl.pathname === '/auth/callback') {
+    console.log('Middleware - Skipping auth callback route');
+    return supabaseResponse;
   }
 
-  if (
-    request
-      .nextUrl
-      .pathname !==
-      "/" &&
-    !user &&
-    !request.nextUrl.pathname.startsWith(
-      "/auth"
-    )
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
-    const url =
-      request.nextUrl.clone();
-    url.pathname =
-      "/auth";
-    return NextResponse.redirect(
-      url
-    );
+  const publicRoutes = ["/", "/auth"];
+  const isPublicRoute = publicRoutes.includes(request.nextUrl.pathname);
+
+  // If user is not authenticated and trying to access protected route
+  if (!user && !isPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  // If user is authenticated, check if they have a profile
+  if (user) {
+    // Check if user has a profile in the database
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+
+    console.log('Middleware - Profile check:', profile ? 'has profile' : 'no profile');
+
+    // If authenticated user is on landing page, redirect based on profile status
+    // if (request.nextUrl.pathname === "/") {
+    //   const url = request.nextUrl.clone();
+    //   if (profile) {
+    //     url.pathname = "/dashboard";
+    //     console.log('Middleware - Redirecting authenticated user with profile to dashboard');
+    //   } else {
+    //     url.pathname = "/onboarding";
+    //     console.log('Middleware - Redirecting authenticated user without profile to onboarding');
+    //   }
+    //   return NextResponse.redirect(url);
+    // }
+
+    // If no profile and not on onboarding page, redirect to onboarding
+    if (!profile && request.nextUrl.pathname !== "/onboarding") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
+      return NextResponse.redirect(url);
+    }
+
+    // If has profile and on onboarding page, redirect to dashboard
+    if (profile && request.nextUrl.pathname === "/onboarding") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+
+    // If authenticated user tries to access auth pages, redirect to dashboard
+    if (request.nextUrl.pathname.startsWith("/auth")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
